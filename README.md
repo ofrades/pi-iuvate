@@ -1,3 +1,11 @@
+# ⚠️ Archived
+
+**pi-iuvate is archived.** Its functionality has been merged into [pi-modus](https://github.com/ofrades/pi-modus), which provides Amp-style mode switching (`rush`/`smart`/`deep`) plus named subagents (`oracle`, `review`, `search`, `librarian`, `vision`) with exact Amp system prompts.
+
+If you have an existing `iuvate` config, `pi-modus` will automatically migrate `iuvate.routes` into `modus.subagents` on first use.
+
+---
+
 # pi-iuvate
 
 Focused subagent delegation for [Pi](https://github.com/earendil-works/pi).
@@ -28,6 +36,8 @@ Lists and configures routes.
 
 ```text
 /iuvate list
+/iuvate on
+/iuvate off
 /iuvate set <route> <provider/model>
 ```
 
@@ -57,6 +67,7 @@ Config is stored in `settings.json` under the agent directory:
 ```json
 {
   "iuvate": {
+    "enabled": true,
     "routes": {
       "vision": { "provider": "opencode", "model": "gemini-3.1-pro" },
       "librarian": { "provider": "opencode", "model": "claude-sonnet-4-6" },
@@ -65,5 +76,7 @@ Config is stored in `settings.json` under the agent directory:
   }
 }
 ```
+
+Set `enabled` to `false` (or run `/iuvate off`) to disable the system-prompt guidance and reject `iuvate` tool calls until `/iuvate on` is run.
 
 Routes without a configured `provider`/`model` are listed as `unconfigured` and will return an error if the agent tries to delegate to them.

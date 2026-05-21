@@ -37,10 +37,11 @@ type RouteConfig = {
 };
 
 type Config = {
+  enabled?: boolean;
   routes?: Partial<Record<RouteName, RouteConfig>>;
 };
 
-const DEFAULT_CONFIG: Config = {};
+const DEFAULT_CONFIG: Config = { enabled: true };
 
 const ROUTE_METADATA: Record<
   RouteName,
@@ -98,6 +99,7 @@ function loadConfig(): Config {
   if (!raw || typeof raw !== "object") return { ...DEFAULT_CONFIG };
   const r = raw as Record<string, unknown>;
   return {
+    enabled: typeof r.enabled === "boolean" ? r.enabled : DEFAULT_CONFIG.enabled,
     routes: (r.routes as Config["routes"]) ?? undefined,
   };
 }
@@ -462,17 +464,20 @@ async function runSubprocess(
 // ---------------------------------------------------------------------------
 
 export default function iuvateExtension(pi: ExtensionAPI) {
-  pi.on("before_agent_start", async (event, _ctx) => ({
-    systemPrompt:
-      event.systemPrompt +
-      "\n\n## iuvate\n" +
-      "Use `iuvate` when you lack a capability, want a second opinion, or are stuck:\n" +
-      "- route='search' — find code/context you cannot locate\n" +
-      "- route='vision' — describe an image or screenshot you cannot see\n" +
-      "- route='review' — catch bugs after making changes\n" +
-      "- route='oracle' — strategy, planning, tradeoffs, or when stuck in a loop\n" +
-      "- route='librarian' — external docs, APIs, unfamiliar libraries",
-  }));
+  pi.on("before_agent_start", async (event, _ctx) => {
+    if (loadConfig().enabled === false) return;
+    return {
+      systemPrompt:
+        event.systemPrompt +
+        "\n\n## iuvate\n" +
+        "Use `iuvate` when you lack a capability, want a second opinion, or are stuck:\n" +
+        "- route='search' — find code/context you cannot locate\n" +
+        "- route='vision' — describe an image or screenshot you cannot see\n" +
+        "- route='review' — catch bugs after making changes\n" +
+        "- route='oracle' — strategy, planning, tradeoffs, or when stuck in a loop\n" +
+        "- route='librarian' — external docs, APIs, unfamiliar libraries",
+    };
+  });
 
   pi.registerTool({
     name: "iuvate",
@@ -497,6 +502,10 @@ export default function iuvateExtension(pi: ExtensionAPI) {
     }),
     async execute(_toolCallId, params, signal, onUpdate, ctx) {
       const config = loadConfig();
+      if (config.enabled === false) {
+        throw new Error(`iuvate is disabled. Use /iuvate on to enable it.`);
+      }
+
       const routeName = params.route as RouteName;
       const routeConfig = config.routes?.[routeName];
       if (!routeConfig) {
@@ -609,10 +618,10 @@ export default function iuvateExtension(pi: ExtensionAPI) {
   });
 
   pi.registerCommand("iuvate", {
-    description: "Configure routes: /iuvate list | set <route> <provider/model>",
+    description: "Configure iuvate: /iuvate list | on | off | set <route> <provider/model>",
     getArgumentCompletions: (prefix) => {
       const [first = ""] = prefix.trimStart().split(/\s+/);
-      return ["list", "set"]
+      return ["list", "on", "off", "set"]
         .filter((s) => s.startsWith(first))
         .map((value) => ({ value, label: value }));
     },
@@ -629,7 +638,18 @@ export default function iuvateExtension(pi: ExtensionAPI) {
             : `unconfigured (recommended: ${meta.recommendedModel})`;
           return `  ${name}: ${configured} — ${meta.description}`;
         });
-        notify(ctx, `Routes:\n${lines.join("\n")}`, "info");
+        notify(
+          ctx,
+          `Iuvate: ${config.enabled === false ? "off" : "on"}\nRoutes:\n${lines.join("\n")}`,
+          "info",
+        );
+        return;
+      }
+
+      if (subcommand === "on" || subcommand === "off") {
+        config.enabled = subcommand === "on";
+        persistConfig(ctx, config);
+        notify(ctx, `Iuvate ${config.enabled ? "enabled" : "disabled"}.`, "info");
         return;
       }
 
@@ -653,7 +673,7 @@ export default function iuvateExtension(pi: ExtensionAPI) {
         return;
       }
 
-      notify(ctx, `Unknown subcommand "${subcommand}". Use: list or set`, "error");
+      notify(ctx, `Unknown subcommand "${subcommand}". Use: list, on, off, or set`, "error");
     },
   });
 }
